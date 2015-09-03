@@ -4,6 +4,11 @@ namespace JackTales\Command;
 
 use Pheanstalk\Job;
 
+/**
+ * Class ExampleWorkerCommand
+ *
+ * @package JackTales\Command
+ */
 class ExampleWorkerCommand extends AbstractWorkerCommand
 {
     protected function configure()
@@ -38,10 +43,16 @@ class ExampleWorkerCommand extends AbstractWorkerCommand
     /**
      * @param Job $job
      * @return int
+     * @throws \Exception
      */
     protected function processJob(Job $job)
     {
         $data = json_decode($job->getData(), true);
+
+        // Throw exception
+        if ('error' === $data['message']) {
+            throw new \Exception('Example error thrown from worker');
+        }
 
         $this->output->writeln('<comment>' . $data['message'] . '</comment>');
 

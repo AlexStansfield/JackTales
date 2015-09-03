@@ -35,6 +35,11 @@ abstract class AbstractWorkerCommand extends Command
     protected $pheanstalk;
 
     /**
+     * @var bool
+     */
+    protected $terminated = false;
+
+    /**
      * @var string
      */
     protected $tube;
@@ -61,6 +66,13 @@ abstract class AbstractWorkerCommand extends Command
     {
         $this->input = $input;
         $this->output = $output;
+
+        // Required for signal catching
+        declare(ticks = 1);
+
+        // Catch the TERM and INT signal
+        pcntl_signal(SIGTERM, [$this, 'terminate']);
+        pcntl_signal(SIGINT, [$this, 'terminate']);
 
         // Let the folks at home know what we're doing
         $this->output->writeln('<info>Watching Queue</info>');
@@ -105,41 +117,79 @@ abstract class AbstractWorkerCommand extends Command
         }
 
         // Watch the Queue
-        while ($job = $this->pheanstalk->reserve()) {
-            // Let everyone know we just grabbed a job off the queue
-            $this->output->writeln('<comment>Found Job ID: ' . $job->getId() . '</comment>');
+        while (!$this->isTerminated()) {
+            $job = $this->pheanstalk->reserve(5);
 
-            // Check the data is valid for us to process a job
-            if (!$this->isValid($job)) {
-                $this->output->writeln('<comment>Invalid Job, skipping.</comment>');
-                $outcome = self::ACTION_BURY;
-            } else {
-                // Output to let anyone watching know that we're starting a worker
-                $this->output->writeln('<comment>' . $this->getStartMessage($job) . '</comment>');
+            if ($job) {
+                // Let everyone know we just grabbed a job off the queue
+                $this->output->writeln('<comment>Found Job ID: ' . $job->getId() . '</comment>');
 
-                // Process the Job
-                $outcome = $this->processJob($job, $this->output);
+                // Check the data is valid for us to process a job
+                if (!$this->isValid($job)) {
+                    $this->output->writeln('<comment>Invalid Job, skipping.</comment>');
+                    $outcome = self::ACTION_BURY;
+                } else {
+                    // Output to let anyone watching know that we're starting a worker
+                    $this->output->writeln('<comment>' . $this->getStartMessage($job) . '</comment>');
 
-                // Let the folks know we've completed it
-                $this->output->writeln('<comment>Job Processed.</comment>');
+                    try {
+                        // Process the job
+                        $outcome = $this->processJob($job);
+                    } catch (\Exception $e) {
+                        // Output error
+                        $this->output->writeln('<error>Fatal Error: ' . $e->getMessage() . '</error>');
+                        // Bury the job
+                        $this->pheanstalk->bury($job);
+                        // Break out of while loop
+                        break;
+                    }
+
+                    // Let the folks know we've completed it
+                    $this->output->writeln('<comment>Job Processed.</comment>');
+                }
+
+                switch ($outcome) {
+                    case self::ACTION_DELETE:
+                        // Remove the job from the queue
+                        $this->pheanstalk->delete($job);
+                        break;
+                    case self::ACTION_BURY:
+                        // Remove the job from the queue
+                        $this->pheanstalk->bury($job);
+                        break;
+                    case self::ACTION_RELEASE:
+                        // Remove the job from the queue
+                        $this->pheanstalk->release($job);
+                        break;
+                }
+
+                $this->output->writeln('<info>Waiting for next job...</info>');
             }
-
-            switch ($outcome) {
-                case self::ACTION_DELETE:
-                    // Remove the job from the queue
-                    $this->pheanstalk->delete($job);
-                    break;
-                case self::ACTION_BURY:
-                    // Remove the job from the queue
-                    $this->pheanstalk->bury($job);
-                    break;
-                case self::ACTION_RELEASE:
-                    // Remove the job from the queue
-                    $this->pheanstalk->release($job);
-                    break;
-            }
-
-            $this->output->writeln('<info>Waiting for next job...</info>');
         }
+
+        $this->output->writeln('<info>Exiting.</info>');
+    }
+
+    /**
+     * Terminate the worker
+     *
+     * @return $this
+     */
+    public function terminate()
+    {
+        $this->output->writeln('<info>Caught Signal. Graceful Exit.</info>');
+        $this->terminated = true;
+
+        return $this;
+    }
+
+    /**
+     * Has the worker been given order to terminate?
+     *
+     * @return bool
+     */
+    public function isTerminated()
+    {
+        return $this->terminated;
     }
 }
