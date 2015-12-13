@@ -40,6 +40,11 @@ abstract class AbstractWorkerCommand extends Command
     protected $terminated = false;
 
     /**
+     * @var int
+     */
+    protected $ttl = 3600;
+
+    /**
      * @var string
      */
     protected $tube;
@@ -127,6 +132,9 @@ abstract class AbstractWorkerCommand extends Command
      */
     public function watchForJobs()
     {
+        // Time the worker will retire
+        $retireTime = time() + $this->ttl;
+
         if (null !== $this->tube) {
             $this->pheanstalk->watchOnly($this->tube);
         }
@@ -180,6 +188,11 @@ abstract class AbstractWorkerCommand extends Command
 
                 $this->output->writeln('<info>Waiting for next job...</info>');
             }
+
+            // Check if it's time to retire the worker
+            if (time() > ($retireTime)) {
+                $this->retire();
+            }
         }
 
         $this->output->writeln('<info>Exiting.</info>');
@@ -193,6 +206,19 @@ abstract class AbstractWorkerCommand extends Command
     public function terminate()
     {
         $this->output->writeln('<info>Caught Signal. Graceful Exit.</info>');
+        $this->terminated = true;
+
+        return $this;
+    }
+
+    /**
+     * Retire Worker
+     *
+     * @return $this
+     */
+    public function retire()
+    {
+        $this->output->writeln('<info>Worker reached old age, retiring.</info>');
         $this->terminated = true;
 
         return $this;
