@@ -48,11 +48,26 @@ abstract class AbstractWorkerCommand extends Command
      * @param PheanstalkInterface $pheanstalk
      * @param string|null $name
      */
-    public function __construct(PheanstalkInterface $pheanstalk, $name = null)
+    public function __construct($name = null, PheanstalkInterface $pheanstalk = null)
     {
         parent::__construct($name);
 
+        if (null !== $pheanstalk) {
+            $this->setPheanstalk($pheanstalk);
+        }
+    }
+
+    /**
+     * Set the Pheanstalk
+     *
+     * @param PheanstalkInterface $pheanstalk
+     * @return $this
+     */
+    public function setPheanstalk(PheanstalkInterface $pheanstalk)
+    {
         $this->pheanstalk = $pheanstalk;
+
+        return $this;
     }
 
     /**
