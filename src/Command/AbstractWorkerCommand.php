@@ -76,6 +76,32 @@ abstract class AbstractWorkerCommand extends Command
     }
 
     /**
+     * Set the tube to listen to
+     *
+     * @param string $tube
+     * @return $this
+     */
+    public function setTube($tube)
+    {
+        $this->tube = $tube;
+
+        return $this;
+    }
+
+    /**
+     * Set the worker Time to Live
+     *
+     * @param int $ttl
+     * @return $this
+     */
+    public function setTtl($ttl)
+    {
+        $this->ttl = $ttl;
+
+        return $this;
+    }
+
+    /**
      * Execute the command
      *
      * @param InputInterface $input
@@ -190,7 +216,7 @@ abstract class AbstractWorkerCommand extends Command
             }
 
             // Check if it's time to retire the worker
-            if (time() > ($retireTime)) {
+            if ((0 !== $this->ttl) && (time() > ($retireTime))) {
                 $this->retire();
             }
         }
