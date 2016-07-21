@@ -10,7 +10,7 @@
     }
   ],
   "require": {
-    "symfony/console": "~2.5",
+    "symfony/console": "^2.5 || ^3.0",
     "pda/pheanstalk": "~3.0"
   },
   "autoload": {
